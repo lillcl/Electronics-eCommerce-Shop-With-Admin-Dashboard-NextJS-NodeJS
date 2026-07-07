@@ -14,19 +14,23 @@ import Image from "next/image";
 import Link from "next/link";
 import React, { useEffect, useState } from "react";
 import CustomButton from "./CustomButton";
-import apiClient from "@/lib/api";
+import { createClient } from "@/lib/supabase/client";
+import { toUiProduct, type ProductForUi } from "@/lib/data/product-adapter";
 import { sanitize } from "@/lib/sanitize";
 
 const DashboardProductTable = () => {
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<ProductForUi[]>([]);
 
   useEffect(() => {
-    apiClient.get("/api/products?mode=admin", {cache: "no-store"})
-      .then((res) => {
-        return res.json();
-      })
-      .then((data) => {
-        setProducts(data);
+    const supabase = createClient();
+    supabase
+      .from("products")
+      .select(
+        "*, category:categories(id, name), merchant:merchants(id, name), product_images(id, image)"
+      )
+      .order("created_at", { ascending: false })
+      .then(({ data }) => {
+        setProducts((data ?? []).map((p: any) => toUiProduct(p)));
       });
   }, []);
 
@@ -80,7 +84,7 @@ const DashboardProductTable = () => {
                           <Image
                             width={48}
                             height={48}
-                            src={product?.mainImage ? `/${product?.mainImage}` : "/product_placeholder.jpg"}
+                            src={product?.mainImage || "/product_placeholder.jpg"}
                             alt={sanitize(product?.title) || "Product image"}
                             className="w-auto h-auto"
                           />

@@ -9,7 +9,7 @@ import {
   formatCategoryName,
 } from "../../../../../utils/categoryFormating";
 import { nanoid } from "nanoid";
-import apiClient from "@/lib/api";
+import { createClient } from "@/lib/supabase/client";
 
 interface DashboardProductDetailsProps {
   params: Promise<{ id: string }>;
@@ -26,28 +26,16 @@ const DashboardProductDetails = ({ params }: DashboardProductDetailsProps) => {
 
   // functionality for deleting product
   const deleteProduct = async () => {
-    const requestOptions = {
-      method: "DELETE",
-    };
-    apiClient
-      .delete(`/api/products/${id}`, requestOptions)
-      .then((response) => {
-        if (response.status !== 204) {
-          if (response.status === 400) {
-            toast.error(
-              "Cannot delete the product because of foreign key constraint"
-            );
-          } else {
-            throw Error("There was an error while deleting product");
-          }
-        } else {
-          toast.success("Product deleted successfully");
-          router.push("/admin/products");
-        }
-      })
-      .catch((error) => {
-        toast.error("There was an error while deleting product");
-      });
+    const supabase = createClient();
+    const { error } = await supabase.from("products").delete().eq("id", id);
+    if (error) {
+      toast.error(
+        "Cannot delete the product because of foreign key constraint"
+      );
+      return;
+    }
+    toast.success("Product deleted successfully");
+    router.push("/admin/products");
   };
 
   // functionality for updating product
@@ -64,17 +52,26 @@ const DashboardProductDetails = ({ params }: DashboardProductDetailsProps) => {
     }
 
     try {
-      const response = await apiClient.put(`/api/products/${id}`, product);
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("products")
+        .update({
+          title: product?.title,
+          slug: product?.slug,
+          price: Number(product?.price) || 0,
+          manufacturer: product?.manufacturer,
+          in_stock: Number(product?.inStock) || 0,
+          main_image: product?.mainImage || null,
+          description: product?.description,
+          category_id: product?.categoryId,
+        })
+        .eq("id", id);
 
-      if (response.status === 200) {
-        await response.json();
-        toast.success("Product successfully updated");
-      } else {
-        const errorData = await response.json();
-        toast.error(
-          errorData.error || "There was an error while updating product"
-        );
+      if (error) {
+        toast.error(error.message || "There was an error while updating product");
+        return;
       }
+      toast.success("Product successfully updated");
     } catch (error) {
       console.error("Error updating product:", error);
       toast.error("There was an error while updating product");
@@ -83,54 +80,45 @@ const DashboardProductDetails = ({ params }: DashboardProductDetailsProps) => {
 
   // functionality for uploading main image file
   const uploadFile = async (file: any) => {
-    const formData = new FormData();
-    formData.append("uploadedFile", file);
-
-    try {
-      const response = await apiClient.post("/api/main-image", {
-        method: "POST",
-        body: formData,
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-      } else {
-        toast.error("File upload unsuccessful.");
-      }
-    } catch (error) {
-      console.error("There was an error while during request sending:", error);
-      toast.error("There was an error during request sending");
-    }
+    // File storage upload is not wired to the mock; the selected file name is
+    // stored as main_image so the reference persists.
+    return file?.name ?? "";
   };
 
   // fetching main product data including other product images
   const fetchProductData = async () => {
-    apiClient
-      .get(`/api/products/${id}`)
-      .then((res) => {
-        return res.json();
-      })
-      .then((data) => {
-        setProduct(data);
-      });
+    const supabase = createClient();
+    const { data } = await supabase
+      .from("products")
+      .select("*, product_images(id, image)")
+      .eq("id", id)
+      .single();
 
-    const imagesData = await apiClient.get(`/api/images/${id}`, {
-      cache: "no-store",
-    });
-    const images = await imagesData.json();
-    setOtherImages((currentImages) => images);
+    if (data) {
+      setProduct({
+        id: data.id,
+        slug: data.slug,
+        title: data.title,
+        mainImage: data.main_image,
+        price: data.price,
+        rating: data.rating,
+        description: data.description,
+        manufacturer: data.manufacturer,
+        inStock: data.in_stock,
+        categoryId: data.category_id,
+      } as Product);
+      setOtherImages((data.product_images as OtherImages[]) ?? []);
+    }
   };
 
   // fetching all product categories. It will be used for displaying categories in select category input
   const fetchCategories = async () => {
-    apiClient
-      .get(`/api/categories`)
-      .then((res) => {
-        return res.json();
-      })
-      .then((data) => {
-        setCategories(data);
-      });
+    const supabase = createClient();
+    const { data } = await supabase
+      .from("categories")
+      .select("id, name")
+      .order("name", { ascending: true });
+    setCategories((data as Category[]) ?? []);
   };
 
   useEffect(() => {

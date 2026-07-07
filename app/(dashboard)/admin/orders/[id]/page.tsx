@@ -1,6 +1,6 @@
 "use client";
 import { DashboardSidebar } from "@/components";
-import apiClient from "@/lib/api";
+import { createClient } from "@/lib/supabase/client";
 import { isValidEmailAddressFormat, isValidNameOrLastname } from "@/lib/utils";
 import Image from "next/image";
 import Link from "next/link";
@@ -31,7 +31,7 @@ const AdminSingleOrder = () => {
   const [orderProducts, setOrderProducts] = useState<OrderProduct[]>();
   const [order, setOrder] = useState<Order>({
     id: "",
-    adress: "",
+    address: "",
     apartment: "",
     company: "",
     dateTime: "",
@@ -52,23 +52,60 @@ const AdminSingleOrder = () => {
 
   useEffect(() => {
     const fetchOrderData = async () => {
-      const response = await apiClient.get(
-        `/api/orders/${params?.id}`
-      );
-      const data: Order = await response.json();
-      setOrder(data);
-    };
+      if (!params?.id) return;
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("orders")
+        .select(
+          "*, order_items(id, quantity, product_id, product:products(id, slug, title, main_image, price, rating, description, manufacturer, in_stock, category_id))"
+        )
+        .eq("id", params.id)
+        .single();
 
-    const fetchOrderProducts = async () => {
-      const response = await apiClient.get(
-        `/api/order-product/${params?.id}`
+      if (error || !data) return;
+
+      setOrder({
+        id: data.id,
+        address: data.address ?? "",
+        apartment: data.apartment ?? "",
+        company: data.company ?? "",
+        dateTime: data.created_at ?? "",
+        email: data.email ?? "",
+        lastname: data.lastname ?? "",
+        name: data.name ?? "",
+        phone: data.phone ?? "",
+        postalCode: data.postal_code ?? "",
+        city: data.city ?? "",
+        country: data.country ?? "",
+        orderNotice: data.order_notice ?? "",
+        status: data.status ?? "processing",
+        total: data.total ?? 0,
+      });
+
+      const products: OrderProduct[] = (data.order_items ?? []).map(
+        (item: any) => ({
+          id: item.id,
+          customerOrderId: data.id,
+          productId: item.product_id,
+          quantity: item.quantity,
+          product: {
+            id: item.product?.id,
+            slug: item.product?.slug,
+            title: item.product?.title,
+            mainImage: item.product?.main_image,
+            price: item.product?.price,
+            rating: item.product?.rating,
+            description: item.product?.description,
+            manufacturer: item.product?.manufacturer,
+            inStock: item.product?.in_stock,
+            categoryId: item.product?.category_id,
+          },
+        })
       );
-      const data: OrderProduct[] = await response.json();
-      setOrderProducts(data);
+      setOrderProducts(products);
     };
 
     fetchOrderData();
-    fetchOrderProducts();
   }, [params?.id]);
 
   const updateOrder = async () => {
@@ -78,7 +115,7 @@ const AdminSingleOrder = () => {
       order?.phone.length > 0 &&
       order?.email.length > 0 &&
       order?.company.length > 0 &&
-      order?.adress.length > 0 &&
+      order?.address.length > 0 &&
       order?.apartment.length > 0 &&
       order?.city.length > 0 &&
       order?.country.length > 0 &&
@@ -99,45 +136,48 @@ const AdminSingleOrder = () => {
         return;
       }
 
-      apiClient.put(`/api/orders/${order?.id}`, {
-        method: "PUT", // or 'PUT'
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(order),
-      })
-        .then((response) => {
-          if (response.status === 200) {
-            toast.success("Order updated successfuly");
-          } else {
-            throw Error("There was an error while updating a order");
-          }
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("orders")
+        .update({
+          name: order.name,
+          lastname: order.lastname,
+          phone: order.phone,
+          email: order.email,
+          company: order.company,
+          address: order.address,
+          apartment: order.apartment,
+          postal_code: order.postalCode,
+          city: order.city,
+          country: order.country,
+          order_notice: order.orderNotice,
+          status: order.status,
         })
-        .catch((error) =>
-          toast.error("There was an error while updating a order")
-        );
+        .eq("id", order.id);
+
+      if (error) {
+        toast.error("There was an error while updating a order");
+        return;
+      }
+      toast.success("Order updated successfuly");
     } else {
       toast.error("Please fill all fields");
     }
   };
 
   const deleteOrder = async () => {
-    const requestOptions = {
-      method: "DELETE",
-    };
-
-    apiClient.delete(
-      `/api/order-product/${order?.id}`,
-      requestOptions
-    ).then((response) => {
-      apiClient.delete(
-        `/api/orders/${order?.id}`,
-        requestOptions
-      ).then((response) => {
-        toast.success("Order deleted successfully");
-        router.push("/admin/orders");
-      });
-    });
+    const supabase = createClient();
+    await supabase.from("order_items").delete().eq("order_id", order?.id);
+    const { error } = await supabase
+      .from("orders")
+      .delete()
+      .eq("id", order?.id);
+    if (error) {
+      toast.error("There was an error while deleting a order");
+      return;
+    }
+    toast.success("Order deleted successfully");
+    router.push("/admin/orders");
   };
 
   return (
@@ -201,7 +241,7 @@ const AdminSingleOrder = () => {
         <div>
           <label className="form-control w-full max-w-xs">
             <div className="label">
-              <span className="label-text">Email adress:</span>
+              <span className="label-text">Email address:</span>
             </div>
             <input
               type="email"
@@ -235,8 +275,8 @@ const AdminSingleOrder = () => {
               <input
                 type="text"
                 className="input input-bordered w-full max-w-xs"
-                value={order?.adress}
-                onChange={(e) => setOrder({ ...order, adress: e.target.value })}
+                value={order?.address}
+                onChange={(e) => setOrder({ ...order, address: e.target.value })}
               />
             </label>
           </div>

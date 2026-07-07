@@ -1,53 +1,34 @@
-"use client"
+"use client";
+
 import { useWishlistStore } from "@/app/_zustand/wishlistStore";
-import WishItem from "@/components/WishItem";
-import apiClient from "@/lib/api";
-import { nanoid } from "nanoid";
-import { useSession } from "next-auth/react";
+import { useAuth } from "@/components/AuthProvider";
+import { listWishlist } from "@/lib/data/wishlist";
+import Link from "next/link";
 import { useEffect } from "react";
+import { nanoid } from "nanoid";
 
 export const WishlistModule = () => {
-  const { data: session, status } = useSession();
+  const { user } = useAuth();
   const { wishlist, setWishlist } = useWishlistStore();
 
-  const getWishlistByUserId = async (id: string) => {
-    const response = await apiClient.get(`/api/wishlist/${id}`, {
-      cache: "no-store",
-    });
-    const wishlist = await response.json();
-
-    const productArray: {
-      id: string;
-      title: string;
-      price: number;
-      image: string;
-      slug: string
-      stockAvailabillity: number;
-    }[] = [];
-
-    wishlist.map((item: any) => productArray.push({ id: item?.product?.id, title: item?.product?.title, price: item?.product?.price, image: item?.product?.mainImage, slug: item?.product?.slug, stockAvailabillity: item?.product?.inStock }));
-
-    setWishlist(productArray);
-  };
-
-  const getUserByEmail = async () => {
-    if (session?.user?.email) {
-      apiClient.get(`/api/users/email/${session?.user?.email}`, {
-        cache: "no-store",
-      })
-        .then((response) => response.json())
-        .then((data) => {
-          getWishlistByUserId(data?.id);
-        });
-    }
-  };
-
   useEffect(() => {
-    getUserByEmail();
-  }, [session?.user?.email, wishlist.length]);
+    if (!user) return;
+    (async () => {
+      const items = await listWishlist(user.id);
+      const productArray = items.map((it: any) => ({
+        id: it.product.id,
+        title: it.product.title,
+        price: it.product.price,
+        image: it.product.main_image,
+        slug: it.product.slug,
+        stockAvailabillity: it.product.in_stock,
+      }));
+      setWishlist(productArray);
+    })();
+  }, [user, setWishlist]);
+
   return (
     <>
-
       {wishlist && wishlist.length === 0 ? (
         <h3 className="text-center text-4xl py-10 text-black max-lg:text-3xl max-sm:text-2xl max-sm:pt-5 max-[400px]:text-xl">
           No items found in the wishlist
@@ -66,23 +47,38 @@ export const WishlistModule = () => {
                 </tr>
               </thead>
               <tbody>
-                {wishlist &&
-                  wishlist?.map((item) => (
-                    <WishItem
-                      id={item?.id}
-                      title={item?.title}
-                      price={item?.price}
-                      image={item?.image}
-                      slug={item?.slug}
-                      stockAvailabillity={item?.stockAvailabillity}
-                      key={nanoid()}
-                    />
-                  ))}
+                {wishlist?.map((item) => (
+                  <tr key={nanoid()}>
+                    <td>
+                      <input type="checkbox" className="checkbox" />
+                    </td>
+                    <td>
+                      <Link href={`/product/${item.slug}`}>
+                        <img
+                          src={item.image}
+                          alt={item.title}
+                          className="w-20 h-20 object-cover mx-auto"
+                        />
+                      </Link>
+                    </td>
+                    <td>
+                      <Link href={`/product/${item.slug}`} className="hover:underline">
+                        {item.title}
+                      </Link>
+                    </td>
+                    <td>
+                      {item.stockAvailabillity > 0 ? "In stock" : "Out of stock"}
+                    </td>
+                    <td>
+                      <button className="btn btn-sm">Remove</button>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
         </div>
       )}
     </>
-  )
-}
+  );
+};

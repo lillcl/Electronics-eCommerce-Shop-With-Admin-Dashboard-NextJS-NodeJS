@@ -1,6 +1,6 @@
 "use client";
 import { DashboardSidebar } from "@/components";
-import apiClient from "@/lib/api";
+import { createClient } from "@/lib/supabase/client";
 import { convertCategoryNameToURLFriendly as convertSlugToURLFriendly } from "@/utils/categoryFormating";
 import { sanitizeFormData } from "@/lib/form-sanitize";
 import Image from "next/image";
@@ -44,34 +44,39 @@ const AddNewProduct = () => {
     }
 
     try {
-      // Sanitize form data before sending to API
       const sanitizedProduct = sanitizeFormData(product);
+      const supabase = createClient();
+      const { error } = await supabase.from("products").insert({
+        merchant_id: sanitizedProduct.merchantId,
+        title: sanitizedProduct.title,
+        price: Number(sanitizedProduct.price) || 0,
+        manufacturer: sanitizedProduct.manufacturer,
+        in_stock: Number(sanitizedProduct.inStock) || 0,
+        main_image: sanitizedProduct.mainImage || null,
+        description: sanitizedProduct.description,
+        slug: sanitizedProduct.slug,
+        category_id: sanitizedProduct.categoryId,
+        rating: 0,
+      });
 
-      console.log("Sending product data:", sanitizedProduct);
-
-      // Correct usage of apiClient.post
-      const response = await apiClient.post(`/api/products`, sanitizedProduct);
-
-      if (response.status === 201) {
-        const data = await response.json();
-        console.log("Product created successfully:", data);
-        toast.success("Product added successfully");
-        setProduct({
-          merchantId: "",
-          title: "",
-          price: 0,
-          manufacturer: "",
-          inStock: 1,
-          mainImage: "",
-          description: "",
-          slug: "",
-          categoryId: categories[0]?.id || "",
-        });
-      } else {
-        const errorData = await response.json();
-        console.error("Failed to create product:", errorData);
-        toast.error(`"Error:" ${errorData.message || "Failed to add product"}`);
+      if (error) {
+        console.error("Failed to create product:", error);
+        toast.error(`Error: ${error.message || "Failed to add product"}`);
+        return;
       }
+
+      toast.success("Product added successfully");
+      setProduct({
+        merchantId: merchants[0]?.id || "",
+        title: "",
+        price: 0,
+        manufacturer: "",
+        inStock: 1,
+        mainImage: "",
+        description: "",
+        slug: "",
+        categoryId: categories[0]?.id || "",
+      });
     } catch (error) {
       console.error("Error adding product:", error);
       toast.error("Network error. Please try again.");
@@ -80,11 +85,14 @@ const AddNewProduct = () => {
 
   const fetchMerchants = async () => {
     try {
-      const res = await apiClient.get("/api/merchants");
-      const data: Merchant[] = await res.json();
-      setMerchants(data || []);
+      const supabase = createClient();
+      const { data } = await supabase
+        .from("merchants")
+        .select("id, name")
+        .order("name", { ascending: true });
+      setMerchants((data as Merchant[]) || []);
       setProduct((prev) => ({
-      ...prev,
+        ...prev,
         merchantId: prev.merchantId || data?.[0]?.id || "",
       }));
     } catch (e) {
@@ -93,45 +101,20 @@ const AddNewProduct = () => {
   };
 
   const uploadFile = async (file: any) => {
-    const formData = new FormData();
-    formData.append("uploadedFile", file);
-
-    try {
-      const response = await apiClient.post("/api/main-image", {
-        method: "POST",
-        body: formData,
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-      } else {
-        console.error("File upload unsuccessfull");
-      }
-    } catch (error) {
-      console.error("Error happend while sending request:", error);
-    }
+    // File storage upload is not wired to the mock; the selected file name is
+    // stored as main_image so the reference persists.
+    return file?.name ?? "";
   };
 
   const fetchCategories = async () => {
-    apiClient
-      .get(`/api/categories`)
-      .then((res) => {
-        return res.json();
-      })
-      .then((data) => {
-        setCategories(data);
-        setProduct({
-          merchantId: product.merchantId || "",
-          title: "",
-          price: 0,
-          manufacturer: "",
-          inStock: 1,
-          mainImage: "",
-          description: "",
-          slug: "",
-          categoryId: data[0]?.id,
-        });
-      });
+    const supabase = createClient();
+    const { data } = await supabase
+      .from("categories")
+      .select("id, name")
+      .order("name", { ascending: true });
+    const cats = (data as Category[]) || [];
+    setCategories(cats);
+    setProduct((prev) => ({ ...prev, categoryId: cats[0]?.id || "" }));
   };
 
   useEffect(() => {

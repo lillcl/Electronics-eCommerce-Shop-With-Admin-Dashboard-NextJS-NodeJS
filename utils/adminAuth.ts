@@ -1,23 +1,18 @@
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { redirect } from "next/navigation";
+import { getCurrentUser } from "@/lib/auth";
 
+/**
+ * Server-side admin gate. Redirects to /login if unauthenticated,
+ * or to / if the user is not an admin. Returns the admin user.
+ */
 export async function requireAdmin() {
-  const session = await getServerSession(authOptions);
-  
-  if (!session) {
-    redirect("/login");
-  }
-  
-  if ((session as any)?.user?.role !== "admin") {
-    redirect("/");
-  }
-  
-  return session;
+  const me = await getCurrentUser();
+  if (!me) redirect("/login");
+  if (me.profile.role !== "admin") redirect("/");
+  return me;
 }
 
 export async function isAdmin(): Promise<boolean> {
-  const session = await getServerSession(authOptions);
-  return (session as any)?.user?.role === "admin";
+  const me = await getCurrentUser();
+  return me?.profile.role === "admin";
 }
-

@@ -1,79 +1,47 @@
-// *********************
-// Role of the component: Header component
-// Name of the component: Header.tsx
-// Developer: Aleksandar Kuzmanovic
-// Version: 1.0
-// Component call: <Header />
-// Input parameters: no input parameters
-// Output: Header component
-// *********************
-
 "use client";
+
 import { usePathname } from "next/navigation";
-import React, { useEffect, useState } from "react";
+import React, { useEffect } from "react";
 import HeaderTop from "./HeaderTop";
 import Image from "next/image";
 import SearchInput from "./SearchInput";
 import Link from "next/link";
-import { FaBell } from "react-icons/fa6";
-
 import CartElement from "./CartElement";
 import NotificationBell from "./NotificationBell";
 import HeartElement from "./HeartElement";
-import { signOut, useSession } from "next-auth/react";
 import toast from "react-hot-toast";
 import { useWishlistStore } from "@/app/_zustand/wishlistStore";
-import apiClient from "@/lib/api";
+import { useAuth } from "@/components/AuthProvider";
+import { listWishlist } from "@/lib/data/wishlist";
 
 const Header = () => {
-  const { data: session, status } = useSession();
+  const { user, signOut } = useAuth();
   const pathname = usePathname();
   const { wishlist, setWishlist, wishQuantity } = useWishlistStore();
 
-  const handleLogout = () => {
-    setTimeout(() => signOut(), 1000);
+  const handleLogout = async () => {
+    await signOut();
     toast.success("Logout successful!");
   };
 
-  // getting all wishlist items by user id
-  const getWishlistByUserId = async (id: string) => {
-    const response = await apiClient.get(`/api/wishlist/${id}`, {
-      cache: "no-store",
-    });
-    const wishlist = await response.json();
-    const productArray: {
-      id: string;
-      title: string;
-      price: number;
-      image: string;
-      slug:string
-      stockAvailabillity: number;
-    }[] = [];
-
-    return; // temporary disable wishlist fetching while the issue is being resolved
-    
-    wishlist.map((item: any) => productArray.push({id: item?.product?.id, title: item?.product?.title, price: item?.product?.price, image: item?.product?.mainImage, slug: item?.product?.slug, stockAvailabillity: item?.product?.inStock}));
-    
-    setWishlist(productArray);
-  };
-
-  // getting user by email so I can get his user id
-  const getUserByEmail = async () => {
-    if (session?.user?.email) {
-      
-      apiClient.get(`/api/users/email/${session?.user?.email}`, {
-        cache: "no-store",
-      })
-        .then((response) => response.json())
-        .then((data) => {
-          getWishlistByUserId(data?.id);
-        });
-    }
-  };
-
   useEffect(() => {
-    getUserByEmail();
-  }, [session?.user?.email, wishlist.length]);
+    if (!user) {
+      setWishlist([]);
+      return;
+    }
+    (async () => {
+      const items = await listWishlist(user.id);
+      const productArray = items.map((it: any) => ({
+        id: it.product.id,
+        title: it.product.title,
+        price: it.product.price,
+        image: it.product.main_image,
+        slug: it.product.slug,
+        stockAvailabillity: it.product.in_stock,
+      }));
+      setWishlist(productArray);
+    })();
+  }, [user, setWishlist]);
 
   return (
     <header className="bg-white">
@@ -118,15 +86,9 @@ const Header = () => {
                 tabIndex={0}
                 className="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52"
               >
-                <li>
-                  <Link href="/admin">Dashboard</Link>
-                </li>
-                <li>
-                  <a>Profile</a>
-                </li>
-                <li onClick={handleLogout}>
-                  <a href="#">Logout</a>
-                </li>
+                <li><Link href="/admin">Dashboard</Link></li>
+                <li><Link href="/">Visit site</Link></li>
+                <li onClick={handleLogout}><a href="#">Logout</a></li>
               </ul>
             </div>
           </div>

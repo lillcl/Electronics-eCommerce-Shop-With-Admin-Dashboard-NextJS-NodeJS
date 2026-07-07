@@ -4,9 +4,9 @@ import {
 
   ProductTabs,
   SingleProductDynamicFields,
-  
+
 } from "@/components";
-import apiClient from "@/lib/api";
+import { getProductBySlug, toUiProduct } from "@/lib/data/products";
 import Image from "next/image";
 import { notFound } from "next/navigation";
 import React from "react";
@@ -17,31 +17,23 @@ import { sanitize } from "@/lib/sanitize";
 
 interface ImageItem {
   imageID: string;
-  productID: string;
   image: string;
 }
 
 interface SingleProductPageProps {
-  params: Promise<{  productSlug: string, id: string }>;
+  params: Promise<{ productSlug: string }>;
 }
 
 const SingleProductPage = async ({ params }: SingleProductPageProps) => {
-  const paramsAwaited = await params;
-  // sending API request for a single product with a given product slug
-  const data = await apiClient.get(
-    `/api/slugs/${paramsAwaited?.productSlug}`
-  );
-  const product = await data.json();
+  const { productSlug } = await params;
+  const row = await getProductBySlug(productSlug);
 
-  // sending API request for more than 1 product image if it exists
-  const imagesData = await apiClient.get(
-    `/api/images/${paramsAwaited?.id}`
-  );
-  const images = await imagesData.json();
-
-  if (!product || product.error) {
+  if (!row) {
     notFound();
   }
+
+  const product = toUiProduct(row);
+  const images: ImageItem[] = product.images;
 
   return (
     <div className="bg-white">
@@ -49,7 +41,7 @@ const SingleProductPage = async ({ params }: SingleProductPageProps) => {
         <div className="flex justify-center gap-x-16 pt-10 max-lg:flex-col items-center gap-y-5 px-5">
           <div>
             <Image
-              src={product?.mainImage ? `/${product?.mainImage}` : "/product_placeholder.jpg"}
+              src={product.mainImage || "/product_placeholder.jpg"}
               width={500}
               height={500}
               alt="main image"
@@ -59,7 +51,7 @@ const SingleProductPage = async ({ params }: SingleProductPageProps) => {
               {images?.map((imageItem: ImageItem, key: number) => (
                 <Image
                   key={imageItem.imageID + key}
-                  src={`/${imageItem.image}`}
+                  src={imageItem.image}
                   width={100}
                   height={100}
                   alt="laptop image"
@@ -69,10 +61,10 @@ const SingleProductPage = async ({ params }: SingleProductPageProps) => {
             </div>
           </div>
           <div className="flex flex-col gap-y-7 text-black max-[500px]:text-center">
-        
+
             <h1 className="text-3xl">{sanitize(product?.title)}</h1>
             <p className="text-xl font-semibold">${product?.price}</p>
-            <StockAvailabillity stock={94} inStock={product?.inStock} />
+            <StockAvailabillity stock={94} inStock={product.inStock > 0 ? 1 : 0} />
             <SingleProductDynamicFields product={product} />
             <div className="flex flex-col gap-y-2 max-[500px]:items-center">
              

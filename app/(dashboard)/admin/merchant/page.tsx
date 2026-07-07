@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from "react";
 import DashboardSidebar from "@/components/DashboardSidebar";
 import Link from "next/link";
-import apiClient from "@/lib/api";
+import { createClient } from "@/lib/supabase/client";
 import { toast } from "react-hot-toast";
 
 interface Merchant {
@@ -23,12 +23,15 @@ export default function MerchantPage() {
   const fetchMerchants = async () => {
     try {
       setLoading(true);
-      const response = await apiClient.get("/api/merchants");
-      if (!response.ok) {
-        throw new Error("Failed to fetch merchants");
-      }
-      const data = await response.json();
-      setMerchants(data);
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("merchants")
+        .select("*, products(id)")
+        .order("name", { ascending: true });
+      if (error) throw new Error(error.message);
+      setMerchants(
+        (data ?? []).map((m: any) => ({ ...m, products: m.products ?? [] }))
+      );
     } catch (error) {
       console.error("Error fetching merchants:", error);
       toast.error("Failed to load merchants");

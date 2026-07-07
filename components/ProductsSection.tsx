@@ -11,25 +11,16 @@
 import React from "react";
 import ProductItem from "./ProductItem";
 import Heading from "./Heading";
-import apiClient from "@/lib/api";
+import { listProducts, toUiProduct } from "@/lib/data/products";
 
 const ProductsSection = async () => {
-  let products = [];
-  
+  let products: ReturnType<typeof toUiProduct>[] = [];
+
   try {
-    // sending API request for getting all products
-    const data = await apiClient.get("/api/products");
-    
-    if (!data.ok) {
-      console.error('Failed to fetch products:', data.statusText);
-      products = [];
-    } else {
-      const result = await data.json();
-      // Ensure products is an array
-      products = Array.isArray(result) ? result : [];
-    }
+    const rows = await listProducts({ limit: 8 });
+    products = rows.map(toUiProduct);
   } catch (error) {
-    console.error('Error fetching products:', error);
+    console.error("Error fetching products:", error);
     products = [];
   }
 

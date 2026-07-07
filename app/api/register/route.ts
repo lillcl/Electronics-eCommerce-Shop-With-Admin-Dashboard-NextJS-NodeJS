@@ -1,66 +1,40 @@
-import prisma from "@/utils/db";
-import bcrypt from "bcryptjs";
-import { nanoid } from "nanoid";
+/**
+ * Backwards-compatible JSON registration endpoint.
+ * Real signup now happens client-side via supabase.auth.signUp().
+ * This endpoint is kept for any external client still calling /api/register.
+ */
 import { NextResponse } from "next/server";
-import { registrationSchema } from "@/utils/schema";
-import { sanitizeInput, commonValidations } from "@/utils/validation";
-import { handleApiError, AppError } from "@/utils/errorHandler";
+import { createClient } from "@/lib/supabase/server";
 
-export const POST = async (request: Request) => {
+export async function POST(request: Request) {
+  let body: { email?: string; password?: string; name?: string; lastname?: string };
   try {
-    // Get client IP for rate limiting
-    const clientIP = request.headers.get("x-forwarded-for") || 
-                    request.headers.get("x-real-ip") || 
-                    "unknown";
-
-    // Check rate limit
-    if (!commonValidations.checkRateLimit(clientIP, 5, 15 * 60 * 1000)) {
-      throw new AppError("Too many registration attempts. Please try again later.", 429);
-    }
-
-    const body = await sanitizeInput.validateJsonInput(request);
-
-    const validationResult = registrationSchema.safeParse(body);
-    
-    if (!validationResult.success) {
-      throw validationResult.error;
-    }
-
-    const { email, password } = validationResult.data;
-
-    const existingUser = await prisma.user.findFirst({ 
-      where: { email } 
-    });
-
-    if (existingUser) {
-      throw new AppError("Email is already in use", 400);
-    }
-
-    const hashedPassword = await bcrypt.hash(password, 14);
-
-    // Create user with proper error handling
-    const newUser = await prisma.user.create({
-      data: {
-        id: nanoid(),
-        email,
-        password: hashedPassword,
-        role: "user",
-      },
-    });
-
-    // Return success response without sensitive data
-    return new NextResponse(
-      JSON.stringify({ 
-        message: "User registered successfully",
-        userId: newUser.id 
-      }),
-      { 
-        status: 200,
-        headers: { "Content-Type": "application/json" }
-      }
-    );
-
-  } catch (error) {
-    return handleApiError(error);
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
-};
+
+  const email = body.email?.trim();
+  const password = body.password;
+  if (!email || !password) {
+    return NextResponse.json({ error: "Email and password required" }, { status: 400 });
+  }
+  if (password.length < 8) {
+    return NextResponse.json({ error: "Password must be at least 8 characters" }, { status: 400 });
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      data: {
+        full_name: [body.name, body.lastname].filter(Boolean).join(" ").trim() || null,
+      },
+    },
+  });
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 400 });
+  }
+  return NextResponse.json({ message: "User registered successfully", userId: data.user?.id });
+}

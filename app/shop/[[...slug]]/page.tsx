@@ -5,9 +5,9 @@ import {
   Breadcrumb,
   Filters,
   Pagination,
-  Products,
   SortBy,
 } from "@/components";
+import Products from "@/components/Products";
 import React from "react";
 import { sanitize } from "@/lib/sanitize";
 

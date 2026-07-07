@@ -5,7 +5,7 @@ import React, { useEffect, useState, use } from "react";
 import toast from "react-hot-toast";
 import { formatCategoryName } from "../../../../../utils/categoryFormating";
 import { convertCategoryNameToURLFriendly } from "../../../../../utils/categoryFormating";
-import apiClient from "@/lib/api";
+import { createClient } from "@/lib/supabase/client";
 
 interface DashboardSingleCategoryProps {
   params: Promise<{ id: string }>;
@@ -21,38 +21,29 @@ const DashboardSingleCategory = ({ params }: DashboardSingleCategoryProps) => {
   const router = useRouter();
 
   const deleteCategory = async () => {
-    const requestOptions = {
-      method: "DELETE",
-    };
-    // sending API request for deleting a category
-    apiClient
-      .delete(`/api/categories/${id}`, requestOptions)
-      .then((response) => {
-        if (response.status === 204) {
-          toast.success("Category deleted successfully");
-          router.push("/admin/categories");
-        } else {
-          throw Error("There was an error deleting a category");
-        }
-      })
-      .catch((error) => {
-        toast.error("There was an error deleting category");
-      });
+    const supabase = createClient();
+    const { error } = await supabase.from("categories").delete().eq("id", id);
+    if (!error) {
+      toast.success("Category deleted successfully");
+      router.push("/admin/categories");
+    } else {
+      toast.error("There was an error deleting category");
+    }
   };
 
   const updateCategory = async () => {
     if (categoryInput.name.length > 0) {
       try {
-        const response = await apiClient.put(`/api/categories/${id}`, {
-          name: convertCategoryNameToURLFriendly(categoryInput.name),
-        });
+        const supabase = createClient();
+        const { error } = await supabase
+          .from("categories")
+          .update({ name: convertCategoryNameToURLFriendly(categoryInput.name) })
+          .eq("id", id);
 
-        if (response.status === 200) {
-          await response.json();
+        if (!error) {
           toast.success("Category successfully updated");
         } else {
-          const errorData = await response.json();
-          toast.error(errorData.error || "Error updating a category");
+          toast.error(error.message || "Error updating a category");
         }
       } catch (error) {
         console.error("Error updating category:", error);
@@ -65,16 +56,14 @@ const DashboardSingleCategory = ({ params }: DashboardSingleCategoryProps) => {
   };
 
   useEffect(() => {
-    // sending API request for getting single categroy
-    apiClient
-      .get(`/api/categories/${id}`)
-      .then((res) => {
-        return res.json();
-      })
-      .then((data) => {
-        setCategoryInput({
-          name: data?.name,
-        });
+    const supabase = createClient();
+    supabase
+      .from("categories")
+      .select("*")
+      .eq("id", id)
+      .single()
+      .then(({ data }) => {
+        if (data) setCategoryInput({ name: data.name });
       });
   }, [id]);
 

@@ -1,9 +1,15 @@
 "use client";
-import React from "react";
-import { SessionProvider } from "next-auth/react";
 
-const AuthProvider = ({ children }: any) => {
-  return <SessionProvider>{children}</SessionProvider>;
-};
+import { AuthProvider } from "@/components/AuthProvider";
 
-export default AuthProvider;
+/**
+ * Backwards-compatible alias for the old NextAuth SessionProvider.
+ * Wrap your app in <SessionProvider> (or now <AuthProvider>) to enable auth state.
+ */
+export default function SessionProvider({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return <AuthProvider>{children}</AuthProvider>;
+}

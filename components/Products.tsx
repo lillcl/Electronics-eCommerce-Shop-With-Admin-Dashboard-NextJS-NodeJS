@@ -10,58 +10,54 @@
 
 import React from "react";
 import ProductItem from "./ProductItem";
-import apiClient from "@/lib/api";
+import { listProducts, toUiProduct, type ProductForUi } from "@/lib/data/products";
 
 const Products = async ({ params, searchParams }: { params: { slug?: string[] }, searchParams: { [key: string]: string | string[] | undefined } }) => {
-  // getting all data from URL slug and preparing everything for sending GET request
-  const inStockNum = searchParams?.inStock === "true" ? 1 : 0;
-  const outOfStockNum = searchParams?.outOfStock === "true" ? 1 : 0;
-  const page = searchParams?.page ? Number(searchParams?.page) : 1;
+  const inStockChecked = searchParams?.inStock === "true";
+  const outOfStockChecked = searchParams?.outOfStock === "true";
+  const maxPrice = Number(searchParams?.price ?? 3000);
+  const minRating = Number(searchParams?.rating ?? 0);
+  const sort = typeof searchParams?.sort === "string" ? searchParams.sort : "defaultSort";
+  const categorySlug = params?.slug?.[0];
 
-  let stockMode: string = "lte";
-  
-  // preparing inStock and out of stock filter for GET request
-  // If in stock checkbox is checked, stockMode is "equals"
-  if (inStockNum === 1) {
-    stockMode = "equals";
-  }
- // If out of stock checkbox is checked, stockMode is "lt"
-  if (outOfStockNum === 1) {
-    stockMode = "lt";
-  }
-   // If in stock and out of stock checkboxes are checked, stockMode is "lte"
-  if (inStockNum === 1 && outOfStockNum === 1) {
-    stockMode = "lte";
-  }
-   // If in stock and out of stock checkboxes aren't checked, stockMode is "gt"
-  if (inStockNum === 0 && outOfStockNum === 0) {
-    stockMode = "gt";
-  }
-
-  let products = [];
+  let products: ProductForUi[] = [];
 
   try {
-    // sending API request with filtering, sorting and pagination for getting all products
-    const data = await apiClient.get(`/api/products?filters[price][$lte]=${
-        searchParams?.price || 3000
-      }&filters[rating][$gte]=${
-        Number(searchParams?.rating) || 0
-      }&filters[inStock][$${stockMode}]=1&${
-        params?.slug?.length! > 0
-          ? `filters[category][$equals]=${params?.slug}&`
-          : ""
-      }sort=${searchParams?.sort}&page=${page}`
-    );
+    const rows = await listProducts();
+    products = rows.map(toUiProduct);
 
-    if (!data.ok) {
-      console.error('Failed to fetch products:', data.statusText);
-      products = [];
-    } else {
-      const result = await data.json();
-      products = Array.isArray(result) ? result : [];
+    if (categorySlug) {
+      const wanted = categorySlug.replace(/-/g, " ").toLowerCase();
+      products = products.filter(
+        (p) => (p.category?.name ?? "").toLowerCase() === wanted
+      );
+    }
+
+    products = products.filter((p) => p.price <= maxPrice && p.rating >= minRating);
+
+    // stock filter: only narrow when exactly one checkbox is active
+    if (inStockChecked && !outOfStockChecked) {
+      products = products.filter((p) => p.inStock > 0);
+    } else if (outOfStockChecked && !inStockChecked) {
+      products = products.filter((p) => p.inStock === 0);
+    }
+
+    switch (sort) {
+      case "titleAsc":
+        products.sort((a, b) => a.title.localeCompare(b.title));
+        break;
+      case "titleDesc":
+        products.sort((a, b) => b.title.localeCompare(a.title));
+        break;
+      case "lowPrice":
+        products.sort((a, b) => a.price - b.price);
+        break;
+      case "highPrice":
+        products.sort((a, b) => b.price - a.price);
+        break;
     }
   } catch (error) {
-    console.error('Error fetching products:', error);
+    console.error("Error fetching products:", error);
     products = [];
   }
 

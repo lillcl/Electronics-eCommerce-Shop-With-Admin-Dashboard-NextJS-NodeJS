@@ -1,9 +1,8 @@
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { getCurrentUser } from "@/lib/auth";
 
 export async function isAdmin(): Promise<boolean> {
-  const session = await getServerSession(authOptions);
-  return (session as any)?.user?.role === "admin";
+  const me = await getCurrentUser();
+  return me?.profile.role === "admin";
 }
 
 export async function requireAdmin() {

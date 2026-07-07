@@ -1,21 +1,27 @@
 "use client";
 import { CustomButton, DashboardSidebar } from "@/components";
-import apiClient from "@/lib/api";
+import { createClient } from "@/lib/supabase/client";
 import { nanoid } from "nanoid";
 import Link from "next/link";
 import React, { useEffect, useState } from "react";
+
+interface User {
+  id: string;
+  email: string;
+  role: string;
+}
 
 const DashboardUsers = () => {
   const [users, setUsers] = useState<User[]>([]);
 
   useEffect(() => {
-    // sending API request for all users
-    apiClient.get("/api/users")
-      .then((res) => {
-        return res.json();
-      })
-      .then((data) => {
-        setUsers(data);
+    const supabase = createClient();
+    supabase
+      .from("profiles")
+      .select("id, email, role")
+      .order("created_at", { ascending: false })
+      .then(({ data }) => {
+        setUsers((data as User[]) ?? []);
       });
   }, []);
 

@@ -12,17 +12,20 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import apiClient from "@/lib/api";
+import { createClient } from "@/lib/supabase/client";
+import type { Order } from "@/lib/supabase/types";
 
 const AdminOrders = () => {
   const [orders, setOrders] = useState<Order[]>([]);
 
   useEffect(() => {
+    const supabase = createClient();
     const fetchOrders = async () => {
-      const response = await apiClient.get("/api/orders");
-      const data = await response.json();
-      
-      setOrders(data?.orders);
+      const { data } = await supabase
+        .from("orders")
+        .select("*")
+        .order("created_at", { ascending: false });
+      setOrders(data ?? []);
     };
     fetchOrders();
   }, []);
@@ -84,7 +87,7 @@ const AdminOrders = () => {
                     <p>${order?.total}</p>
                   </td>
 
-                  <td>{ new Date(Date.parse(order?.dateTime)).toDateString() }</td>
+                  <td>{ new Date(Date.parse(order?.created_at)).toDateString() }</td>
                   <th>
                     <Link
                       href={`/admin/orders/${order?.id}`}

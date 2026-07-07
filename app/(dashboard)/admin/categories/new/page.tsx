@@ -3,7 +3,7 @@ import { DashboardSidebar } from "@/components";
 import React, { useState } from "react";
 import toast from "react-hot-toast";
 import { convertCategoryNameToURLFriendly } from "../../../../../utils/categoryFormating";
-import apiClient from "@/lib/api";
+import { createClient } from "@/lib/supabase/client";
 
 const DashboardNewCategoryPage = () => {
   const [categoryInput, setCategoryInput] = useState({
@@ -13,21 +13,16 @@ const DashboardNewCategoryPage = () => {
   const addNewCategory = async () => {
     if (categoryInput.name.length > 0) {
       try {
-        const response = await apiClient.post(`/api/categories`, {
+        const supabase = createClient();
+        const { error } = await supabase.from("categories").insert({
           name: convertCategoryNameToURLFriendly(categoryInput.name),
         });
 
-        if (response.status === 201) {
-          await response.json();
+        if (!error) {
           toast.success("Category added successfully");
-          setCategoryInput({
-            name: "",
-          });
+          setCategoryInput({ name: "" });
         } else {
-          const errorData = await response.json();
-          toast.error(
-            errorData.error || "There was an error while creating category"
-          );
+          toast.error(error.message || "There was an error while creating category");
         }
       } catch (error) {
         console.error("Error creating category:", error);

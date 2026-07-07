@@ -1,18 +1,6 @@
-// *********************
-// Role of the component: Single product tabs on the single product page containing product description, main product info and reviews
-// Name of the component: ProductTabs.tsx
-// Developer: Aleksandar Kuzmanovic
-// Version: 1.0
-// Component call: <ProductTabs product={product} />
-// Input parameters: { product: Product }
-// Output: Single product tabs containing product description, main product info and reviews
-// *********************
-
 "use client";
 
 import React, { useState } from "react";
-import RatingPercentElement from "./RatingPercentElement";
-import SingleReview from "./SingleReview";
 import { formatCategoryName } from "@/utils/categoryFormating";
 import { sanitize, sanitizeHtml } from "@/lib/sanitize";
 
@@ -43,10 +31,10 @@ const ProductTabs = ({ product }: { product: Product }) => {
       </div>
       <div className="pt-5">
         {currentProductTab === 0 && (
-          <div 
+          <div
             className="text-lg max-sm:text-base max-sm:text-sm"
-            dangerouslySetInnerHTML={{ 
-              __html: sanitizeHtml(product?.description) 
+            dangerouslySetInnerHTML={{
+              __html: sanitizeHtml(product?.description),
             }}
           />
         )}
@@ -55,12 +43,10 @@ const ProductTabs = ({ product }: { product: Product }) => {
           <div className="overflow-x-auto">
             <table className="table text-xl text-center max-[500px]:text-base">
               <tbody>
-                {/* row 1 */}
                 <tr>
                   <th>Manufacturer:</th>
                   <td>{sanitize(product?.manufacturer)}</td>
                 </tr>
-                {/* row 2 */}
                 <tr>
                   <th>Category:</th>
                   <td>
@@ -69,10 +55,9 @@ const ProductTabs = ({ product }: { product: Product }) => {
                       : "No category"}
                   </td>
                 </tr>
-                {/* row 3 */}
                 <tr>
-                  <th>Color:</th>
-                  <td>Silver, LightSlateGray, Blue</td>
+                  <th>In stock:</th>
+                  <td>{product?.inStock}</td>
                 </tr>
               </tbody>
             </table>

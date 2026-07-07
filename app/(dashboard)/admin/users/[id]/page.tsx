@@ -4,7 +4,7 @@ import React, { useEffect, useState, use } from "react";
 import toast from "react-hot-toast";
 import { useRouter } from "next/navigation";
 import { isValidEmailAddressFormat } from "@/lib/utils";
-import apiClient from "@/lib/api";
+import { createClient } from "@/lib/supabase/client";
 
 interface DashboardUserDetailsProps {
   params: Promise<{ id: string }>;
@@ -26,77 +26,56 @@ const DashboardSingleUserPage = ({ params }: DashboardUserDetailsProps) => {
   const router = useRouter();
 
   const deleteUser = async () => {
-    const requestOptions = {
-      method: "DELETE",
-    };
-    apiClient
-      .delete(`/api/users/${id}`, requestOptions)
-      .then((response) => {
-        if (response.status === 204) {
-          toast.success("User deleted successfully");
-          router.push("/admin/users");
-        } else {
-          throw Error("There was an error while deleting user");
-        }
-      })
-      .catch((error) => {
-        toast.error("There was an error while deleting user");
-      });
+    const supabase = createClient();
+    const { error } = await supabase.from("profiles").delete().eq("id", id);
+    if (error) {
+      toast.error("There was an error while deleting user");
+      return;
+    }
+    toast.success("User deleted successfully");
+    router.push("/admin/users");
   };
 
   const updateUser = async () => {
-    if (
-      userInput.email.length > 3 &&
-      userInput.role.length > 0 &&
-      userInput.newPassword.length > 0
-    ) {
-      if (!isValidEmailAddressFormat(userInput.email)) {
-        toast.error("You entered invalid email address format");
-        return;
-      }
-
-      if (userInput.newPassword.length > 7) {
-        try {
-          const response = await apiClient.put(`/api/users/${id}`, {
-            email: userInput.email,
-            password: userInput.newPassword,
-            role: userInput.role,
-          });
-
-          if (response.status === 200) {
-            await response.json();
-            toast.success("User successfully updated");
-          } else {
-            const errorData = await response.json();
-            toast.error(errorData.error || "Error while updating user");
-          }
-        } catch (error) {
-          console.error("Error updating user:", error);
-          toast.error("There was an error while updating user");
-        }
-      } else {
-        toast.error("Password must be longer than 7 characters");
-        return;
-      }
-    } else {
+    if (userInput.email.length <= 3 || userInput.role.length === 0) {
       toast.error("For updating a user you must enter all values");
       return;
     }
+
+    if (!isValidEmailAddressFormat(userInput.email)) {
+      toast.error("You entered invalid email address format");
+      return;
+    }
+
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("profiles")
+      .update({ email: userInput.email, role: userInput.role })
+      .eq("id", id);
+
+    if (error) {
+      console.error("Error updating user:", error);
+      toast.error("There was an error while updating user");
+      return;
+    }
+    toast.success("User successfully updated");
   };
 
   useEffect(() => {
-    // sending API request for a single user
-    apiClient
-      .get(`/api/users/${id}`)
-      .then((res) => {
-        return res.json();
-      })
-      .then((data) => {
-        setUserInput({
-          email: data?.email,
-          newPassword: "",
-          role: data?.role,
-        });
+    const supabase = createClient();
+    supabase
+      .from("profiles")
+      .select("id, email, role")
+      .eq("id", id)
+      .single()
+      .then(({ data }) => {
+        if (data) {
+          setUserInput({
+            email: data.email ?? "",
+            newPassword: "",
+            role: data.role ?? "",
+          });
+        }
       });
   }, [id]);
 

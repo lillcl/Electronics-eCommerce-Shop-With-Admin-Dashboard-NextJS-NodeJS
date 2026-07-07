@@ -3,7 +3,7 @@ import React, { useState } from "react";
 import DashboardSidebar from "@/components/DashboardSidebar";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import apiClient from "@/lib/api";
+import { createClient } from "@/lib/supabase/client";
 import { toast } from "react-hot-toast";
 
 export default function NewMerchantPage() {
@@ -36,19 +36,24 @@ export default function NewMerchantPage() {
     }
     
     setIsSubmitting(true);
-    
+
     try {
-      const response = await apiClient.post("/api/merchants", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
-      });
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("merchants")
+        .insert({
+          name: formData.name,
+          email: formData.email || null,
+          phone: formData.phone || null,
+          address: formData.address || null,
+          description: formData.description || null,
+          status: formData.status,
+        })
+        .select()
+        .single();
 
-      if (!response.ok) {
-        throw new Error("Failed to create merchant");
-      }
+      if (error) throw new Error(error.message);
 
-      const data = await response.json();
       toast.success("Merchant created successfully");
       router.push(`/admin/merchant/${data.id}`);
     } catch (error) {

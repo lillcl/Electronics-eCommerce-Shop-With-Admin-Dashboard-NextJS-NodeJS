@@ -1,251 +1,60 @@
-import { useCallback, useEffect } from 'react';
-import { useSession } from 'next-auth/react';
-import { useNotificationStore } from '@/app/_zustand/notificationStore';
-import { notificationApi } from '@/lib/notification-api';
-import { NotificationFilters } from '@/types/notification';
-import toast from 'react-hot-toast';
+"use client";
 
-/**
- * Custom hook for managing notifications
- */
-export const useNotifications = () => {
-  const { data: session } = useSession();
-  const {
-    notifications,
-    unreadCount,
-    total,
-    page,
-    totalPages,
-    loading,
-    error,
-    filters,
-    selectedIds,
-    setNotifications,
-    setLoading,
-    setError,
-    setFilters,
-    markAsRead,
-    deleteNotification,
-    clearSelection,
-    setUnreadCount
-  } = useNotificationStore();
+import { useCallback, useEffect, useState } from "react";
+import { useAuth } from "@/components/AuthProvider";
+import { createClient } from "@/lib/supabase/client";
+import type { Notification } from "@/lib/supabase/types";
 
-  // Get current user ID
-  const getCurrentUserId = useCallback(async () => {
-    if (!session?.user?.email) return null;
-    
-    try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/users/email/${session.user.email}`);
-      const userData = await response.json();
-      return userData?.id || null;
-    } catch (error) {
-      console.error('Error fetching user ID:', error);
-      return null;
-    }
-  }, [session?.user?.email]);
+/** Hook to read the current user's notifications + unread count. */
+export function useNotifications() {
+  const { user } = useAuth();
+  const supabase = createClient();
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  // Fetch notifications
-  const fetchNotifications = useCallback(async (customFilters?: NotificationFilters) => {
-    const userId = await getCurrentUserId();
-    if (!userId) return;
-
+  const fetch = useCallback(async () => {
+    if (!user) return;
     setLoading(true);
-    setError(null);
+    const { data } = await supabase
+      .from("notifications")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false });
+    setNotifications((data ?? []) as Notification[]);
+    setLoading(false);
+  }, [user, supabase]);
 
-    try {
-      const filtersToUse = customFilters || filters;
-      const response = await notificationApi.getUserNotifications(userId, filtersToUse);
-      setNotifications(response);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch notifications';
-      setError(errorMessage);
-      toast.error(errorMessage);
-    }
-  }, [filters, getCurrentUserId, setNotifications, setLoading, setError]);
+  useEffect(() => {
+    fetch();
+  }, [fetch]);
 
-  // Fetch unread count only
-  const fetchUnreadCount = useCallback(async () => {
-    const userId = await getCurrentUserId();
-    if (!userId) return;
+  return { notifications, loading, refresh: fetch };
+}
 
-    try {
-      const { unreadCount } = await notificationApi.getUnreadCount(userId);
-      setUnreadCount(unreadCount);
-    } catch (error) {
-      console.error('Error fetching unread count:', error);
-    }
-  }, [getCurrentUserId, setUnreadCount]);
+/** Hook for the unread count badge in the header. Polls every 30s. */
+export function useUnreadCount() {
+  const { user } = useAuth();
+  const supabase = createClient();
+  const [unreadCount, setUnreadCount] = useState(0);
 
-  // Mark single notification as read
-  const markNotificationAsRead = useCallback(async (notificationId: string) => {
-    try {
-      await notificationApi.updateNotification(notificationId, true);
-      markAsRead(notificationId);
-      toast.success('Notification marked as read');
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to mark notification as read';
-      toast.error(errorMessage);
-    }
-  }, [markAsRead]);
-
-  // Mark multiple notifications as read
-  const markSelectedAsRead = useCallback(async () => {
-    const userId = await getCurrentUserId();
-    const idsToMarkRead = [...selectedIds]; // Create snapshot
-    
-    if (!userId || idsToMarkRead.length === 0) return;
-
-    try {
-      await notificationApi.bulkMarkAsRead({
-        notificationIds: idsToMarkRead,
-        userId
-      });
-      
-      idsToMarkRead.forEach(id => markAsRead(id));
-      clearSelection();
-      
-      // Refresh unread count
-      await fetchUnreadCount();
-      
-      toast.success(`${idsToMarkRead.length} notifications marked as read`);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to mark notifications as read';
-      toast.error(errorMessage);
-    }
-  }, [selectedIds, getCurrentUserId, markAsRead, clearSelection, fetchUnreadCount]);
-
-  // Delete single notification
-  const deleteNotificationById = useCallback(async (notificationId: string) => {
-    const userId = await getCurrentUserId();
-    if (!userId) return;
-
-    try {
-      await notificationApi.deleteNotification(notificationId, userId);
-      deleteNotification(notificationId);
-      toast.success('Notification deleted');
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to delete notification';
-      toast.error(errorMessage);
-    }
-  }, [getCurrentUserId, deleteNotification]);
-
-  // Delete selected notifications
-  const deleteSelectedNotifications = useCallback(async () => {
-    const userId = await getCurrentUserId();
-    const idsToDelete = [...selectedIds]; // Create snapshot
-    
-    if (!userId || idsToDelete.length === 0) {
+  const refresh = useCallback(async () => {
+    if (!user) {
+      setUnreadCount(0);
       return;
     }
+    const { count } = await supabase
+      .from("notifications")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .eq("is_read", false);
+    setUnreadCount(count ?? 0);
+  }, [user, supabase]);
 
-    try {
-      await notificationApi.bulkDeleteNotifications({
-        notificationIds: idsToDelete,
-        userId
-      });
-      
-      // Update local state - remove deleted notifications
-      idsToDelete.forEach(id => deleteNotification(id));
-      clearSelection();
-      
-      // Refresh data to ensure consistency
-      await fetchNotifications();
-      
-      toast.success(`${idsToDelete.length} notifications deleted`);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to delete notifications';
-      toast.error(errorMessage);
-    }
-  }, [selectedIds, getCurrentUserId, deleteNotification, clearSelection, fetchNotifications]);
-
-  // Update filters and refetch
-  const updateFilters = useCallback((newFilters: Partial<NotificationFilters>) => {
-    const updatedFilters = { ...filters, ...newFilters };
-    setFilters(updatedFilters);
-    fetchNotifications(updatedFilters);
-  }, [filters, setFilters, fetchNotifications]);
-
-  // Load more notifications (pagination)
-  const loadMore = useCallback(() => {
-    if (page < totalPages) {
-      updateFilters({ page: page + 1 });
-    }
-  }, [page, totalPages, updateFilters]);
-
-  return {
-    // Data
-    notifications,
-    unreadCount,
-    total,
-    page,
-    totalPages,
-    loading,
-    error,
-    filters,
-    selectedIds,
-    hasMore: page < totalPages,
-    
-    // Actions
-    fetchNotifications,
-    fetchUnreadCount,
-    markNotificationAsRead,
-    markSelectedAsRead,
-    deleteNotificationById,
-    deleteSelectedNotifications,
-    updateFilters,
-    loadMore,
-    
-    // Store actions (direct access)
-    setFilters,
-    clearSelection
-  };
-};
-
-/**
- * Hook for real-time unread count (for header badge)
- */
-export const useUnreadCount = () => {
-  const { unreadCount, setUnreadCount } = useNotificationStore();
-  const { data: session } = useSession();
-
-  const fetchUnreadCount = useCallback(async () => {
-    if (!session?.user?.email) return;
-
-    try {
-      // Get user ID first
-      const userResponse = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/users/email/${session.user.email}`);
-      const userData = await userResponse.json();
-      
-      if (userData?.id) {
-        const { unreadCount } = await notificationApi.getUnreadCount(userData.id);
-        setUnreadCount(unreadCount);
-      }
-    } catch (error) {
-      console.error('Error fetching unread count:', error);
-    }
-  }, [session?.user?.email, setUnreadCount]);
-
-  // Auto-refresh unread count every 30 seconds
   useEffect(() => {
-    fetchUnreadCount();
-    const interval = setInterval(fetchUnreadCount, 30000); // 30 seconds
-    
-    // Listen for order completed events to refresh immediately
-    const handleOrderCompleted = () => {
-      console.log('Order completed - refreshing notifications');
-      setTimeout(fetchUnreadCount, 1000); // Slight delay to ensure notification is created
-    };
-    
-    window.addEventListener('orderCompleted', handleOrderCompleted);
-    
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener('orderCompleted', handleOrderCompleted);
-    };
-  }, [fetchUnreadCount]);
+    refresh();
+    const interval = setInterval(refresh, 30_000);
+    return () => clearInterval(interval);
+  }, [refresh]);
 
-  return {
-    unreadCount,
-    refreshUnreadCount: fetchUnreadCount
-  };
-};
+  return { unreadCount, refreshUnreadCount: refresh };
+}

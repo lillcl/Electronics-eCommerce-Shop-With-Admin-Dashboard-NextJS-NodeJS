@@ -8,7 +8,7 @@ interface Product {
   mainImage: string;
   manufacturer: string;
   categoryId: string;
-  category: {name: string}?;
+  category: { name: string } | null;
   inStock: number;
 }
 
@@ -51,16 +51,9 @@ interface Category {
   name: string;
 }
 
-interface User {
-  id: string;
-  email: string;
-  password: string | null;
-  role: string;
-}
-
 interface Order {
   id: string;
-  adress: string;
+  address: string;
   apartment: string;
   company: string;
   dateTime: string;
@@ -72,7 +65,7 @@ interface Order {
   status: "processing" | "canceled" | "delivered";
   city: string;
   country: string;
-  orderNotice: string?;
+  orderNotice?: string;
   total: number;
 }
 
@@ -81,40 +74,9 @@ interface SingleProductBtnProps {
   quantityCount: number;
 }
 
-
-interface Category {
-  id: string;
-  name: string;
-}
-
 interface WishListItem {
   id: string;
   userId: string;
   productId: string;
   product: Product;
-}
-
-
-declare module "next-auth" {
-  interface Session {
-    user: {
-      id: string;
-      name: string;
-      email: string;
-      image: string;
-      role: string;
-    };
-  }
-
-  interface User {
-    id: string;
-    role: string;
-  }
-}
-
-declare module "next-auth/jwt" {
-  interface JWT {
-    id: string;
-    role: string;
-  }
 }

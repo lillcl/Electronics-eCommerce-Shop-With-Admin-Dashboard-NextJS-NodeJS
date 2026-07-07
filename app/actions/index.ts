@@ -1,12 +1,10 @@
 'use server'
 
-import apiClient from "@/lib/api";
-import { revalidateTag } from "next/cache";
+import { createAdminClient } from "@/lib/supabase/admin";
 
-export async function deleteWishItem(id: string){
-  apiClient.delete(`/api/wishlist/${id}`, {
-    method: "DELETE",
-  });
+export async function deleteWishItem(id: string) {
+  const supabase = createAdminClient();
+  await supabase.from("wishlists").delete().eq("id", id);
 }
 
 

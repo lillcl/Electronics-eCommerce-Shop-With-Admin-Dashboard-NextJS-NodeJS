@@ -3,7 +3,7 @@ import React, { useEffect, useState, use } from "react";
 import DashboardSidebar from "@/components/DashboardSidebar";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import apiClient from "@/lib/api";
+import { createClient } from "@/lib/supabase/client";
 import { toast } from "react-hot-toast";
 
 interface Product {
@@ -51,18 +51,25 @@ export default function MerchantDetailPage({
   const fetchMerchant = async () => {
     try {
       setLoading(true);
-      const response = await apiClient.get(`/api/merchants/${id}`);
-      
-      if (!response.ok) {
-        if (response.status === 404) {
-          router.push("/admin/merchant");
-          return;
-        }
-        throw new Error("Failed to fetch merchant");
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("merchants")
+        .select("*, products(id, title, price, in_stock)")
+        .eq("id", id)
+        .single();
+
+      if (error || !data) {
+        router.push("/admin/merchant");
+        return;
       }
-      
-      const data = await response.json();
-      setMerchant(data);
+
+      const products = (data.products ?? []).map((p: any) => ({
+        id: p.id,
+        title: p.title,
+        price: p.price,
+        inStock: p.in_stock,
+      }));
+      setMerchant({ ...data, products });
       setFormData({
         name: data.name || "",
         email: data.email || "",
@@ -95,13 +102,20 @@ const handleInputChange = (
  const handleSubmit = async (e: React.FormEvent) => {
   e.preventDefault();
   try {
-    // This is the correct way to use apiClient.put
-    // It should just take the URL and the data object
-    const response = await apiClient.put(`/api/merchants/${id}`, formData);
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("merchants")
+      .update({
+        name: formData.name,
+        email: formData.email || null,
+        phone: formData.phone || null,
+        address: formData.address || null,
+        description: formData.description || null,
+        status: formData.status,
+      })
+      .eq("id", id);
 
-    if (!response.ok) {
-      throw new Error("Failed to update merchant");
-    }
+    if (error) throw new Error(error.message);
 
     toast.success("Merchant updated successfully");
     fetchMerchant(); // Refresh data
@@ -115,15 +129,13 @@ const handleInputChange = (
     if (!confirm("Are you sure you want to delete this merchant?")) {
       return;
     }
-    
+
     try {
-      const response = await apiClient.delete(`/api/merchants/${id}`);
-      
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || "Failed to delete merchant");
-      }
-      
+      const supabase = createClient();
+      const { error } = await supabase.from("merchants").delete().eq("id", id);
+
+      if (error) throw new Error(error.message);
+
       toast.success("Merchant deleted successfully");
       router.push("/admin/merchant");
     } catch (error) {
@@ -271,7 +283,7 @@ const handleInputChange = (
                 {merchant.products.map((product) => (
                   <tr key={product.id} className="border-b hover:bg-gray-50">
                     <td className="py-4">{product.title}</td>
-                    <td className="py-4">${product.price / 100}</td>
+                    <td className="py-4">${product.price}</td>
                     <td className="py-4">{product.inStock}</td>
                     <td className="py-4">
                       <Link

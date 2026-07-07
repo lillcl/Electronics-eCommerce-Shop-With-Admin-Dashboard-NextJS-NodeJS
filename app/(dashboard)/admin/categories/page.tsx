@@ -4,19 +4,21 @@ import { nanoid } from "nanoid";
 import Link from "next/link";
 import React, { useEffect, useState } from "react";
 import { formatCategoryName } from "../../../../utils/categoryFormating";
-import apiClient from "@/lib/api";
+import { createClient } from "@/lib/supabase/client";
+import type { Category } from "@/lib/supabase/types";
 
 const DashboardCategory = () => {
   const [categories, setCategories] = useState<Category[]>([]);
 
   // getting all categories to be displayed on the all categories page
   useEffect(() => {
-    apiClient.get("/api/categories")
-      .then((res) => {
-        return res.json();
-      })
-      .then((data) => {
-        setCategories(data);
+    const supabase = createClient();
+    supabase
+      .from("categories")
+      .select("*")
+      .order("name", { ascending: true })
+      .then(({ data }) => {
+        setCategories(data ?? []);
       });
   }, []);
 
